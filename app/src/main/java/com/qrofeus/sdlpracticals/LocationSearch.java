@@ -17,12 +17,16 @@ import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.FragmentActivity;
 
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 
 import java.io.IOException;
 import java.util.List;
@@ -32,17 +36,20 @@ public class LocationSearch extends FragmentActivity implements OnMapReadyCallba
     GoogleMap map;
     SupportMapFragment fragment;
     SearchView searchView;
+    FusedLocationProviderClient client;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // Internet connection required
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_location_search);
+
+        client = LocationServices.getFusedLocationProviderClient(this);
+
         ConnectivityManager manager = (ConnectivityManager) this.getSystemService(CONNECTIVITY_SERVICE);
         if (manager.getActiveNetworkInfo() == null) {
             Toast.makeText(this, "No Internet Connection", Toast.LENGTH_SHORT).show();
         }
-
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_location_search);
 
         searchView = findViewById(R.id.searchBar);
         fragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map_fragment);
@@ -63,7 +70,7 @@ public class LocationSearch extends FragmentActivity implements OnMapReadyCallba
                         // Search for locations
                         addresses = geocoder.getFromLocationName(location, 5);
                     } catch (IOException e) {
-                        e.printStackTrace();
+                        Toast.makeText(LocationSearch.this, e.toString(), Toast.LENGTH_SHORT).show();
                     }
 
                     if (addresses != null) {
@@ -91,34 +98,33 @@ public class LocationSearch extends FragmentActivity implements OnMapReadyCallba
     }
 
     public void myLocation(View view) {
-        LocationManager manager = (LocationManager) this.getSystemService(LOCATION_SERVICE);
-
-        // Check if GPS is enabled
-        if (manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-
-            // Check for Permissions
-            if (ActivityCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(LocationSearch.this, "Permissions not granted", Toast.LENGTH_SHORT).show();
-                ActivityCompat.requestPermissions(LocationSearch.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 101);
-                ActivityCompat.requestPermissions(LocationSearch.this, new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, 102);
-                return;
-            }
-
-            manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 10, this);
-
-            // Get Location
-            Location location = manager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-
-            // Add Marker
-            if (location != null) {
-                LatLng pos = new LatLng(location.getLatitude(), location.getLongitude());
-                map.addMarker(new MarkerOptions().position(pos).title("Current Position"));
-                map.animateCamera(CameraUpdateFactory.newLatLngZoom(pos, 10.0f));
-            } else
-                Toast.makeText(this, "Location Not Found", Toast.LENGTH_SHORT).show();
-        } else {
-            Toast.makeText(this, "GPS is disabled", Toast.LENGTH_SHORT).show();
+        // Check for Permissions
+        if (ActivityCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(LocationSearch.this, "Permissions not granted", Toast.LENGTH_SHORT).show();
+            ActivityCompat.requestPermissions(LocationSearch.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 101);
+            ActivityCompat.requestPermissions(LocationSearch.this, new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, 102);
+            return;
         }
+
+        // Get Location
+        client.getLastLocation()
+                .addOnSuccessListener(new OnSuccessListener<Location>() {
+                    @Override
+                    public void onSuccess(Location location) {
+                        if (location != null){
+                            LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+                            map.addMarker(new MarkerOptions().position(latLng));
+                            map.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 10.0f));
+                        } else
+                            Toast.makeText(LocationSearch.this, "No Location Found", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        Toast.makeText(LocationSearch.this, "Couldn't get location", Toast.LENGTH_SHORT).show();
+                    }
+                });
     }
 
     @Override
